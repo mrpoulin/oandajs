@@ -1,215 +1,230 @@
 var OANDA = OANDA || {};
+
 OANDA.baseURL = OANDA.baseURL || "http://api-sandbox.oanda.com";
 
-OANDA.transaction = OANDA.transaction || {};
+OANDA.auth = OANDA.auth || {};
+OANDA.auth.enabled = OANDA.auth.enabled || false;
+OANDA.auth.token = OANDA.auth.token || "";
 
-OANDA.transaction.list = function(accountId, callback) {
-    $.getJSON(OANDA.baseURL + "/v1/accounts/" + accountId + "/transactions", {}, function(response, textStatus) {
+var setAuthHeader = function(xhr) {
+    xhr.setRequestHeader("Authorization", "Bearer " + OANDA.auth.token);
+}
+
+var sendAjaxRequest = function(endpoint, method, parameters, requiresAuth, onComplete) {
+    var contentType = "";
+    if(method === 'POST' || method === 'PUT') {
+        contentType = "application/x-www-form-urlencoded";
+    }
+    var beforeSend = function() {}
+    if(OANDA.auth.enabled && requiresAuth) {
+        beforeSend = setAuthHeader;
+    }
+    var req = $.ajax({
+        url: OANDA.baseURL + endpoint, 
+        type: method,
+        dataType: 'json',
+        data : parameters,
+        contentType: contentType,
+        beforeSend: beforeSend,
+    });
+    req.always(onComplete);
+}
+
+/* Send a raw api request on an endpoint.
+ */
+OANDA.api = function(endpoint, method, parameters, callback) {
+
+    sendAjaxRequest(endpoint, method, parameters, true, function(jqXHR, textResponse) {
+        var response = {};
+        if(textResponse != 'success') {
+            response.error= jqXHR;
+        } else {
+            response = jqXHR;
+        }
         if(callback) {
             callback(response);
         }
     });
 }
 
+OANDA.transaction = OANDA.transaction || {};
+
+/* 
+ * Lists all transactions for a specified account.
+ * Accepts no optional parameters.
+ */
+OANDA.transaction.list = function(accountId, callback) {
+    OANDA.api("/v1/accounts/" + accountId + "/transactions", 'GET', {}, callback);
+}
+
+/* List specific transactions by transaction id.
+ * Accepts no optional parameters
+ */
 OANDA.transaction.listSpecific = function(accountId, transId, callback) {
-    $.getJSON(OANDA.baseURL + "/v1/accounts/" + accountId + "/transactions/" + transId, {}, function(response, textStatus) {
-        if(callback) {
-            callback(response);
-        }
-    });
+    OANDA.api("/v1/accounts/" + accountId + "/transactions/" + transId, 'GET', {}, callback);
 }
 
 OANDA.trade = OANDA.trade || {};
 
+/* List all trade in account.
+ * Accepts no optional parameters.
+ */
 OANDA.trade.list = function(accountId, callback) {
-    $.getJSON(OANDA.baseURL + "/v1/accounts/" + accountId + "/trades", {}, function(response, textStatus) {
-        if(callback) {
-            callback(response);
-        }
-    });
+    OANDA.api("/v1/accounts/" + accountId + "/trades", 'GET', {}, callback);
 }
 
+/* List specific trades by id.
+ * Accepts no optional parameters
+ */
 OANDA.trade.listSpecific = function(accountId, tradeIds, callback) {
-    var needComma = false;
-    var tradesStr = "";
-    for(var cur in tradeIds) {
-        if(needComma) {
-            tradesStr += ",";
-        }
-        tradesStr += tradeIds[cur];
-        needComma = true;
-    }
-    $.getJSON(OANDA.baseURL + "/v1/accounts/" + accountId + "/trades", {tradeIds: tradesStr}, function(response, textStatus) {
-        if(callback) {
-            callback(response);
-        }
-    });
+    var tradesStr = tradeIds.join(',');
+    OANDA.api("/v1/accounts/" + accountId + "/trades", 'GET', {ids : tradesStr}, callback);
 }
 
+/* Open a new trade
+ * Accepts optional parameters:
+ * stopLoss     => number
+ * takeProfit   => number
+ * trailingStop => number
+ * upperBound   => number
+ * lowerBound   => number
+ * Accepts optional parameters
+ */
 OANDA.trade.open = function(accountId, instrument, units, side, callback) {
-    $.post(OANDA.baseURL + "/v1/accounts/" + accountId + "/trades", {instrument: instrument, units: units, side : side}, function(response, textStatus) {
-        if(callback) {
-            callback(response);
-        }
-    }, 'json');
+    OANDA.api("/v1/accounts/" + accountId + "/trades", 'POST', {instrument:instrument, units:units, side:side}, callback);
 }
 
+/* Close an existing trade
+ * Accepts no optional parameters.
+ */
 OANDA.trade.close = function(accountId, tradeId, callback) {
-    $.ajax({
-        url: OANDA.baseURL + "/v1/accounts/" + accountId + "/trades/" + tradeId,
-        type: 'DELETE',
-        success: function(response, textStatus) {
-        if(callback) {
-            callback(response);
-        }}});
+    OANDA.api("/v1/accounts/" + accountId + "/trades/" + tradeId, 'DELETE', {}, callback);
 }
 
-OANDA.trade.change = function(accountId, tradeId, stopLoss, takeProfit, trailingStop, callback) {
-    $.ajax({
-        url: OANDA.baseURL + "/v1/accounts/" + accountId + "/trades/" + tradeId,
-        data: {stop_loss: stopLoss, take_profit: takeProfit, trailing_stop: trailingStop},
-        type: 'PUT',
-        success:function(response, textStatus) {
-        if(callback) {
-            callback(response);
-        }}});
+/* Modfify and existing trade
+ * Accepts optional parameters:
+ *  stopLoss     => number
+ *  takeProfit   => number
+ *  trailingStop => number
+ */
+OANDA.trade.change = function(accountId, tradeId, optParameters, callback) {
+    OANDA.api("/v1/accounts/" + accountId + "/trades/" + tradeId, 'PUT', optParameters, callback);
 }
 
 OANDA.order = OANDA.order || {};
 
+
+/* List all orders in account.
+ * Accepts no optional parameters
+ */
 OANDA.order.list = function(accountId, callback) {
-    $.getJSON(OANDA.baseURL + "/v1/accounts/" + accountId + "/orders", {}, function(response, textStatus) {
-        if(callback) {
-            callback(response);
-        }
-    });
+    OANDA.api("/v1/accounts/" + accountId + "/orders", 'GET', {}, callback);
 }
 
+/* List specific orders by id.
+ * Accepts no optional parameters
+ */
 OANDA.order.listSpecific = function(accountId, orderIds, callback) {
-    var needComma = false;
-    var ordersStr = "";
-    for(var cur in orderIds) {
-        if(needComma) {
-            ordersStr += ",";
-        }
-        ordersStr += orderIds[cur];
-        needComma = true;
-    }
-    $.getJSON(OANDA.baseURL + "/v1/accounts/" + accountId + "/orders", {orderIds: ordersStr}, function(response, textStatus) {
-        if(callback) {
-            callback(response);
-        }
-    });
+    var ordersStr = orderIds.join(',');
+    OANDA.api("/v1/accounts/" + accountId + "/orders", 'GET', {ids: ordersStr}, callback);
 }
 
-OANDA.order.open = function(accountId, instrument, units, side, price, expiry, callback) {
-    $.post(OANDA.baseURL + "/v1/accounts/" + accountId + "/orders", {instrument: instrument, units: units, side:side, price: price, expiry:expiry}, function(response, textStatus) {
-        if(callback) {
-            callback(response);
-        }
-    }, 'json');
+/* Create a new order.
+ * Accepts optional parameters
+ * stopLoss     => number
+ * takeProfit   => number
+ * trailingStop => number
+ * upperBound   => number
+ * lowerBound   => number
+ */
+OANDA.order.open = function(accountId, instrument, units, side, price, expiry, type, optParameters, callback) {
+    OANDA.api("/v1/accounts/" + accountId + "/orders", 'POST', 
+              $.extend({instrument: instrument, units: units, side:side, price: price, expiry:expiry, type:type}, optParameters),
+              callback);
 }
 
+/* Close an existing order.
+ * Accepts no optional parameters
+ */
 OANDA.order.close = function(accountId, orderId, callback) {
-    $.ajax({
-        url: OANDA.baseURL + "/v1/accounts/" + accountId + "/orders/" + orderId,
-        type: 'DELETE',
-        success: function(response, textStatus) {
-        if(callback) {
-            callback(response);
-        }}});
+    OANDA.api("/v1/accounts/" + accountId + "/orders/" + orderId, 'DELETE', {}, callback);
 }
 
-OANDA.order.change = function(accountId, orderId, units, price, callback) {
-    $.ajax({
-        url: OANDA.baseURL + "/v1/accounts/" + accountId + "/orders/" + orderId,
-        data: {units: units, price: price},
-        type: 'PUT',
-        success:function(response, textStatus) {
-        if(callback) {
-            callback(response);
-        }}});
+/* Modify an existing order
+ * Accepts optional parameters:
+ * units        => number
+ * price        => number
+ * expiry       => string
+ * lowerBound   => number
+ * upperBound   => number
+ * stopLoss     => number
+ * takeProfit   => number
+ * trailingStop => number
+ */
+OANDA.order.change = function(accountId, orderId, optParameters, callback) {
+    OANDA.api("/v1/accounts/" + accountId + "/orders/" + orderId, 'PUT', optParameters, callback);
 }
-
 
 OANDA.position = OANDA.position || {};
 
+/* List all positions
+ * Accepts no optional parameters
+ */
 OANDA.position.list = function(accountId, callback) {
-    $.getJSON(OANDA.baseURL + "/v1/accounts/" + accountId + "/positions", {}, function(response, textStatus) {
-        if(callback) {
-            callback(response);
-        }
-    });
+    OANDA.api("/v1/accounts/" + accountId + "/positions", 'GET', {}, callback);
 }
 
+/* List only position for specific instrument
+ * Accepts no optional parameters
+ */
 OANDA.position.listSpecific = function(accountId, instrument, callback) {
-    $.getJSON(OANDA.baseURL + "/v1/accounts/" + accountId + "/positions/" + instrument, {}, function(response, textStatus) {
-        if(callback) {
-            callback(response);
-        }
-    });
+    OANDA.api("/v1/accounts/" + accountId + "/positions/" + instrument, 'GET' ,{}, callback);
 }
 
+/* Close all trades in a positions
+ * Accepts no optional parameters
+ */
 OANDA.position.close = function(accountId, instrument, callback) {
-    $.ajax({
-        url: OANDA.baseURL + "/v1/accounts/" + accountId + "/positions/" + instrument,
-        type: 'DELETE',
-        success: function(response, textStatus) {
-                    if(callback) {
-                        callback(response);
-                    }
-                 }
-            });
+    OANDA.api("/v1/accounts/" + accountId + "/positions/" + instrument, 'DELETE', {}, callback);
 }
 
 OANDA.account = OANDA.account || {};
 
-OANDA.account.register = function(callback) {
-    // header('Content-Type: application/x-www-form-urlencoded')
-    $.ajax({
-        url: OANDA.baseURL + "/v1/accounts", 
-        type: 'POST',
-        contentType: "application/x-www-form-urlencoded",
-        success: function(response, textStatus) {
-                    if (callback) {
-                        callback(response);
-                    }
-                 }
-        });
+/* Register an account
+ * Accepts no optional parameters
+ */
+OANDA.account.register = function(currency, callback) {
+    OANDA.api("/v1/accounts", 'POST', {currency:currency}, callback);
 }
 
 OANDA.rate = OANDA.rate || {};
 
-OANDA.rate.list_symbols = function(callback) {
-    $.getJSON(OANDA.baseURL + "/v1/instruments", function(response, textStatus) {
-       if(callback) {
-            callback(response);
-        }
-    });
+/* List all instruments available.
+ * Accepts optional parameters:
+ * fields => array of strings
+ */
+OANDA.rate.instruments = function(fields, callback) {
+    fieldStr = fields.join(',');
+    data = fieldStr ? { "fields" : fieldStr } : {};
+    OANDA.api("/v1/instruments", 'GET', data, callback);
 }
 
-OANDA.rate.history = function(symbol, granularity, count, callback) {
-    $.getJSON(OANDA.baseURL + "/v1/history?instrument=" + symbol, {granularity: granularity, count: count}, function(response, textStatus) {
-        if(callback) {
-            callback(response);
-        }
-    });
+/* Return candlesticks for a specific instrument
+ * Accepts optional parameters:
+ * granularity  => string
+ * count        => number
+ * start        => string
+ * end          => string
+ * candleFormat => string
+ * includeFirst => boolean
+ */
+OANDA.rate.history = function(symbol, optParameters, callback) {
+    OANDA.api("/v1/history", 'GET', $.extend({instrument:symbol}, optParameters), callback);
 }
 
+/* Lists the current price for a list of instruments
+ * Accepts no optional parameters
+ */
 OANDA.rate.quote = function(symbols, callback) {
-    var needComma = false;
-    var symbolStr = "";
-    for(var cur in symbols) {
-        if(needComma) {
-            symbolStr += "%2C";
-        }
-        symbolStr += symbols[cur];
-        needComma = true;
-    }
-    $.getJSON(OANDA.baseURL + "/v1/quote", {instruments: symbolStr}, function(response, textStatus) {
-        if(callback) {
-            callback(response);
-        }
-    });
+    OANDA.api("/v1/quote", 'GET', {instruments: symbols.join(',')}, callback);
 }
-
